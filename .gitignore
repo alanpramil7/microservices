@@ -8,3 +8,5 @@ wheels/
 
 # Virtual environments
 .venv
+kafka*
+hey_linux_amd64
