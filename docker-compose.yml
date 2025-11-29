@@ -101,3 +101,78 @@ services:
       - kafka3
     networks:
       - kafka-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.88.0
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+      - "8889:8889" # Prometheus exporter metrics
+    networks:
+      - kafka-net
+
+  loki:
+    image: grafana/loki:2.9.2
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yaml:/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - kafka-net
+
+  tempo:
+    image: grafana/tempo:2.3.0
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./monitoring/tempo-config.yaml:/etc/tempo.yaml
+      - ./tempo-data:/tmp/tempo
+    ports:
+      - "3200:3200" # Tempo
+      - "4317" # OTLP gRPC
+    networks:
+      - kafka-net
+
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - kafka-net
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    volumes:
+      - ./monitoring/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    ports:
+      - "3000:3000"
+    networks:
+      - kafka-net
+
+  python-service:
+    build: ./python-service
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka1:29092,kafka2:29092,kafka3:29092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=python-service
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - otel-collector
+    networks:
+      - kafka-net
